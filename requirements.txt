@@ -4,3 +4,8 @@ sqlalchemy==2.0.23
 yfinance==0.2.32
 openpyxl==3.1.2
 pytz==2023.3
+pandas
+numpy
+requests
+lxml
+html5lib
