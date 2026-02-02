@@ -396,6 +396,154 @@ def download_history(user_id: int, db: Session = Depends(get_db)):
     ws_move.column_dimensions['F'].width = 12
     ws_move.column_dimensions['G'].width = 14
     ws_move.column_dimensions['H'].width = 15
+
+        # ========== SHEET 5: TRANSACTION DETAILS ==========
+    ws_trans = wb.create_sheet("Transaction Detail")
+    headers_trans = ["#", "Date", "Ticker", "Type", "Shares", "Price", "Amount", "Running Cash"]
+    for col, header in enumerate(headers_trans, 1):
+        cell = ws_trans.cell(row=1, column=col)
+        cell.value = header
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = border
+    
+    running_cash = user.cash + sum(t.total if t.action == "sell" else -t.total for t in trades)
+    row_trans = 2
+    
+    for idx, trade in enumerate(trades, 1):
+        ws_trans[f'A{row_trans}'] = idx
+        ws_trans[f'B{row_trans}'] = trade.timestamp.strftime("%Y-%m-%d")
+        ws_trans[f'C{row_trans}'] = trade.ticker
+        ws_trans[f'D{row_trans}'] = trade.action.upper()
+        ws_trans[f'D{row_trans}'].font = Font(color="00B050" if trade.action == "buy" else "FF0000", bold=True)
+        ws_trans[f'E{row_trans}'] = trade.shares
+        ws_trans[f'F{row_trans}'] = f"{trade.price:.2f}"
+        ws_trans[f'G{row_trans}'] = f"{trade.total:.2f}"
+        ws_trans[f'H{row_trans}'] = f"{running_cash:.2f}"
+        
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']:
+            ws_trans[f'{col}{row_trans}'].border = border
+        
+        running_cash -= (trade.total if trade.action == "sell" else -trade.total)
+        row_trans += 1
+    
+    ws_trans.column_dimensions['A'].width = 6
+    ws_trans.column_dimensions['B'].width = 12
+    ws_trans.column_dimensions['C'].width = 10
+    ws_trans.column_dimensions['D'].width = 10
+    ws_trans.column_dimensions['E'].width = 10
+    ws_trans.column_dimensions['F'].width = 10
+    ws_trans.column_dimensions['G'].width = 12
+    ws_trans.column_dimensions['H'].width = 14
+    
+    # ========== SHEET 6: PERFORMANCE STATS ==========
+    ws_stats = wb.create_sheet("Performance Stats")
+    ws_stats.column_dimensions['A'].width = 25
+    ws_stats.column_dimensions['B'].width = 20
+    ws_stats['A1'] = "PERFORMANCE METRICS"
+    ws_stats['A1'].font = title_font
+    ws_stats['A1'].fill = title_fill
+    ws_stats.merge_cells('A1:B1')
+    
+    row_stats = 3
+    metrics = [
+        ("Total Trades", str(total_trades)),
+        ("Winning Trades", str(winning_trades)),
+        ("Losing Trades", str(losing_trades)),
+        ("Win Rate %", f"{win_rate:.2f}%"),
+        ("Biggest Gain", f"${biggest_gain:.2f}"),
+        ("Biggest Loss", f"${biggest_loss:.2f}"),
+        ("Total Invested", f"${total_invested:.2f}"),
+        ("Total Returned", f"${total_returned:.2f}"),
+        ("Net Profit/Loss", f"${net_pl:.2f}"),
+        ("Return on Investment", f"{(net_pl / 10000 * 100):.2f}%"),
+        ("Starting Capital", "$10,000.00"),
+        ("Current Cash", f"${user.cash:.2f}"),
+    ]
+    
+    for metric, value in metrics:
+        ws_stats[f'A{row_stats}'] = metric
+        ws_stats[f'A{row_stats}'].font = Font(bold=True)
+        ws_stats[f'B{row_stats}'] = value
+        if "Gain" in metric:
+            ws_stats[f'B{row_stats}'].font = Font(color="00B050", bold=True)
+        elif "Loss" in metric:
+            ws_stats[f'B{row_stats}'].font = Font(color="FF0000", bold=True)
+        elif "Profit" in metric:
+            ws_stats[f'B{row_stats}'].font = Font(color="00B050" if net_pl >= 0 else "FF0000", bold=True)
+        row_stats += 1
+    
+    # ========== SHEET 7: PORTFOLIO ANALYSIS ==========
+    ws_port = wb.create_sheet("Portfolio Analysis")
+    headers_port = ["Ticker", "Shares", "Avg Cost", "Current Price", "Position Value", "Unrealized P&L", "Portfolio Weight %"]
+    for col, header in enumerate(headers_port, 1):
+        cell = ws_port.cell(row=1, column=col)
+        cell.value = header
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = border
+    
+    total_position_value = 0
+    positions_data = []
+    
+    for ticker, pos in current_positions.items():
+        if pos["shares"] > 0:
+            avg_price = pos["total_cost"] / pos["shares"]
+            current_price = get_stock_price_finnhub(ticker)
+            if not current_price:
+                current_price = avg_price
+            
+            position_value = current_price * pos["shares"]
+            unrealized_pl = position_value - pos["total_cost"]
+            total_position_value += position_value
+            
+            positions_data.append({
+                "ticker": ticker,
+                "shares": pos["shares"],
+                "avg_price": avg_price,
+                "current_price": current_price,
+                "position_value": position_value,
+                "unrealized_pl": unrealized_pl
+            })
+    
+    row_port = 2
+    for pos in positions_data:
+        weight = (pos["position_value"] / total_position_value * 100) if total_position_value > 0 else 0
+        
+        ws_port[f'A{row_port}'] = pos["ticker"]
+        ws_port[f'B{row_port}'] = pos["shares"]
+        ws_port[f'C{row_port}'] = f"{pos['avg_price']:.2f}"
+        ws_port[f'D{row_port}'] = f"{pos['current_price']:.2f}"
+        ws_port[f'E{row_port}'] = f"{pos['position_value']:.2f}"
+        ws_port[f'F{row_port}'] = f"{pos['unrealized_pl']:.2f}"
+        ws_port[f'F{row_port}'].font = Font(color="00B050" if pos['unrealized_pl'] >= 0 else "FF0000", bold=True)
+        ws_port[f'G{row_port}'] = f"{weight:.2f}%"
+        
+        for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G']:
+            ws_port[f'{col}{row_port}'].border = border
+        
+        row_port += 1
+    
+    # Total row
+    ws_port[f'A{row_port}'] = "TOTAL"
+    ws_port[f'A{row_port}'].font = Font(bold=True)
+    ws_port[f'E{row_port}'] = f"{total_position_value:.2f}"
+    ws_port[f'E{row_port}'].font = Font(bold=True)
+    ws_port[f'G{row_port}'] = "100.00%"
+    ws_port[f'G{row_port}'].font = Font(bold=True)
+    
+    for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G']:
+        ws_port[f'{col}{row_port}'].border = border
+        ws_port[f'{col}{row_port}'].fill = PatternFill(start_color="E7E6E6", end_color="E7E6E6", fill_type="solid")
+    
+    ws_port.column_dimensions['A'].width = 12
+    ws_port.column_dimensions['B'].width = 10
+    ws_port.column_dimensions['C'].width = 12
+    ws_port.column_dimensions['D'].width = 14
+    ws_port.column_dimensions['E'].width = 14
+    ws_port.column_dimensions['F'].width = 15
+    ws_port.column_dimensions['G'].width = 17
+
     
     # Additional sheets (Transaction Detail, Performance Stats, Portfolio Analysis) omitted for brevity but follow same pattern
     
