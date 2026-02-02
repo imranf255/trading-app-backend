@@ -638,6 +638,9 @@ def buy_stock(user_id: int, request: TradeRequest, db: Session = Depends(get_db)
         raise HTTPException(status_code=400, detail=f"Invalid ticker symbol: {request.ticker}")
     
     total_cost = current_price * request.shares
+    commission = total_cost * 0.01  # 1% commission
+    total_cost += commission  # Add commission to total cost
+
     if user.cash < total_cost:
         raise HTTPException(status_code=400, detail=f"Insufficient funds. You need ${total_cost - user.cash:.2f} more")
     
@@ -674,7 +677,10 @@ def sell_stock(user_id: int, request: TradeRequest, db: Session = Depends(get_db
         raise HTTPException(status_code=400, detail=f"Invalid ticker symbol: {request.ticker}")
     
     total_value = current_price * request.shares
+    commission = total_value * 0.01  # 1% commission
+    total_value -= commission  # Deduct commission from proceeds
     user.cash += total_value
+
     trade = Trade(user_id=user_id, ticker=request.ticker, action="sell", shares=request.shares, price=current_price, total=total_value, timestamp=datetime.now())
     db.add(trade)
     check_price_alert(db, user_id, request.ticker, current_price)
