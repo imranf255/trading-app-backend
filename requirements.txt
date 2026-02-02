@@ -1,11 +1,6 @@
-fastapi==0.104.1
-uvicorn==0.24.0
-sqlalchemy==2.0.23
-yfinance==0.2.32
-openpyxl==3.1.2
-pytz==2023.3
-pandas
-numpy
+fastapi
+uvicorn
+sqlalchemy
+pytz
+openpyxl
 requests
-lxml
-html5lib
